@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel App Prototype</title>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load React and ReactDOM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+    
+    <!-- Load Babel for JSX support -->
+    <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes drawLine {
+            from { stroke-dashoffset: 1000; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        .animate-draw {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: drawLine 2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-slate-200">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module" data-presets="react">
+        import React, { useState, useEffect } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import { 
+          Home, Plus, Map, Search, Mic, Heart, Bookmark, MoreHorizontal, 
+          User, Users, Star, MapPin, Clock, ArrowLeft, Calendar, 
+          CheckCircle2, Sparkles, FileText, Globe, ChevronRight, Share2, 
+          Plane, Hotel, Image as ImageIcon, AlertCircle, Copy, Download, Unlock,
+          Maximize2, Minimize2, Navigation, Layers
+        } from 'lucide-react';
+
+        // --- Shared Components ---
+
+        const ImageWithFallback = ({ src, alt, className }) => {
+          const [error, setError] = useState(false);
+          if (error || !src) {
+            return (
+              <div className={`bg-gradient-to-br from-slate-200 to-slate-300 flex flex-col items-center justify-center text-slate-500 ${className}`}>
+                <ImageIcon size={24} className="mb-1 opacity-20" />
+              </div>
+            );
+          }
+          return <img src={src} alt={alt} className={className} onError={() => setError(true)} />;
+        };
+
+        const MobileFrame = ({ children, title, onDarkBackground = false }) => (
+          <div className="flex flex-col items-center space-y-4 flex-shrink-0">
+            <div className="font-mono text-sm text-slate-500 uppercase tracking-widest">{title}</div>
+            <div className="relative w-[375px] h-[812px] bg-slate-50 rounded-[40px] shadow-2xl border-[8px] border-white overflow-hidden flex flex-col font-sans text-slate-900">
+              <div className={`h-11 w-full bg-transparent absolute top-0 z-30 flex justify-between items-center px-6 pt-2 pointer-events-none transition-colors duration-200 ${onDarkBackground ? 'text-white' : 'text-slate-900'}`}>
+                <span className="text-sm font-semibold">9:41</span>
+                <div className="flex space-x-2">
+                  <div className={`w-4 h-4 rounded-full ${onDarkBackground ? 'bg-white opacity-80' : 'bg-slate-900 opacity-20'}`}></div>
+                  <div className={`w-4 h-4 rounded-full ${onDarkBackground ? 'bg-white opacity-80' : 'bg-slate-900 opacity-20'}`}></div>
+                  <div className={`w-6 h-3 rounded-[4px] ${onDarkBackground ? 'bg-white opacity-80' : 'bg-slate-900 opacity-20'}`}></div>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col bg-slate-50">{children}</div>
+              <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-[134px] h-[5px] bg-slate-900 rounded-full opacity-20 z-30 pointer-events-none"></div>
+            </div>
+          </div>
+        );
+
+        const BottomNav = ({ activeTab = 'home' }) => (
+          <div className="absolute bottom-0 w-full bg-white/90 backdrop-blur-md border-t border-slate-100 px-6 py-4 pb-8 flex justify-between items-center z-20">
+            <button className={`flex flex-col items-center space-y-1 ${activeTab === 'home' ? 'text-emerald-500' : 'text-slate-400'}`}>
+              <Home size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+              <span className="text-[10px] font-medium">Home</span>
+            </button>
+            <div className="relative -top-5">
+              <button className="w-14 h-14 bg-emerald-500 rounded-full shadow-lg shadow-emerald-200 flex items-center justify-center text-white transform transition-transform hover:scale-105 active:scale-95">
+                <Plus size={28} strokeWidth={3} />
+              </button>
+            </div>
+            <button className={`flex flex-col items-center space-y-1 ${activeTab === 'trips' ? 'text-emerald-500' : 'text-slate-400'}`}>
+              <Map size={24} strokeWidth={activeTab === 'trips' ? 2.5 : 2} />
+              <span className="text-[10px] font-medium">My Trips</span>
+            </button>
+          </div>
+        );
+
+        const ItineraryCard = ({ title, price, places, tags, image }) => (
+          <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 mb-4 flex gap-4">
+            <div className="w-24 h-24 rounded-xl bg-slate-200 overflow-hidden flex-shrink-0 relative">
+                <ImageWithFallback src={image} alt={title} className="w-full h-full object-cover" />
+            </div>
+            <div className="flex-1 flex flex-col justify-center">
+              <h3 className="font-bold text-slate-900 text-lg leading-tight mb-1">{title}</h3>
+              <div className="flex items-center text-xs text-slate-500 mb-2 space-x-3">
+                <span className="flex items-center"><span className="font-semibold text-emerald-600 mr-1">{price}</span> avg</span>
+                <span className="flex items-center text-slate-400">|</span>
+                <span className="flex items-center"><MapPin size={10} className="mr-1" /> {places} places</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-slate-50 text-slate-500 text-[10px] font-medium rounded-full border border-slate-100">{tag}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+        // --- NEW: Realistic Map Component with TEXT Markers (No Images) ---
+        const RealisticMap = ({ isFull = false }) => {
+            // Data for the route - removed IMG property
+            const markers = isFull 
+            ? [ // Vertical Route
+                { id: 1, x: 280, y: 650, label: "Paris" },
+                { id: 2, x: 140, y: 520, label: "Versailles" },
+                { id: 3, x: 240, y: 400, label: "Giverny" },
+                { id: 4, x: 100, y: 280, label: "Rouen" },
+                { id: 5, x: 180, y: 150, label: "Honfleur" }
+              ]
+            : [ // Horizontal Route
+                { id: 1, x: 50, y: 140, label: "Paris" },
+                { id: 2, x: 130, y: 80, label: "Versailles" },
+                { id: 3, x: 190, y: 150, label: "Giverny" },
+                { id: 4, x: 270, y: 100, label: "Rouen" },
+                { id: 5, x: 330, y: 160, label: "Honfleur" }
+              ];
+
+            // Generate winding path data
+            const generatePath = (pts) => {
+                let d = `M ${pts[0].x} ${pts[0].y}`;
+                for (let i = 0; i < pts.length - 1; i++) {
+                    const p1 = pts[i];
+                    const p2 = pts[i+1];
+                    if (isFull) {
+                         d += ` C ${p1.x} ${p1.y - 60}, ${p2.x} ${p2.y + 60}, ${p2.x} ${p2.y}`;
+                    } else {
+                         d += ` C ${p1.x + 40} ${p1.y}, ${p2.x - 40} ${p2.y}, ${p2.x} ${p2.y}`;
+                    }
+                }
+                return d;
+            };
+
+            const pathData = generatePath(markers);
+
+            return (
+                <div className="absolute inset-0 bg-white">
+                    {/* Subtle Street Map Background */}
+                    <svg className="w-full h-full opacity-10" preserveAspectRatio="none">
+                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="black" strokeWidth="0.5"/>
+                        </pattern>
+                        <rect width="100%" height="100%" fill="url(#grid)" />
+                        <path d="M -20 100 Q 150 50 400 120" stroke="black" strokeWidth="2" fill="none" />
+                        <path d="M 100 -20 Q 120 200 80 400" stroke="black" strokeWidth="2" fill="none" />
+                        <path d="M 300 0 L 250 400" stroke="black" strokeWidth="1" fill="none" />
+                    </svg>
+
+                    {/* The Route Path */}
+                    <svg className="absolute inset-0 w-full h-full" viewBox={isFull ? "0 0 375 812" : "0 0 375 224"} preserveAspectRatio="xMidYMid slice">
+                        <path d={pathData} stroke="white" strokeWidth="8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d={pathData} stroke="#334155" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" className="animate-draw" />
+                    </svg>
+
+                    {/* Text-Based Markers (Replaces Images) */}
+                    {markers.map((m, i) => (
+                        <div 
+                            key={m.id} 
+                            className="absolute z-10 transform transition-transform hover:scale-110 active:scale-95 flex flex-col items-center justify-center"
+                            style={{ 
+                                left: m.x, 
+                                top: m.y, 
+                                transform: 'translate(-50%, -50%)', // Center on the coordinate
+                                animation: `popIn 0.5s ${i * 0.15}s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards` 
+                            }}
+                        >
+                            {/* Dot on the line */}
+                            <div className={`w-3 h-3 rounded-full border-2 border-white shadow-md mb-1 ${i === 0 || i === 4 ? 'bg-emerald-500' : 'bg-slate-800'}`}></div>
+                            
+                            {/* Text Label Badge */}
+                            <div className="bg-white/95 backdrop-blur-sm px-2.5 py-1.5 rounded-lg shadow-md border border-slate-100 flex items-center gap-1.5">
+                                <span className="bg-slate-100 text-slate-500 text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{m.id}</span>
+                                <span className="text-[10px] font-bold text-slate-800 whitespace-nowrap">{m.label}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        // --- Screen 1: Home Page ---
+        const Screen1 = () => (
+            <div className="px-6 pt-16 pb-24">
+              <div className="flex justify-between items-start mb-6">
+                <div><h1 className="text-3xl font-extrabold text-slate-900 leading-tight">Let's plan your<br />next adventure!</h1></div>
+                {/* Updated User Avatar - Woman - New ID */}
+                <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border-2 border-white shadow-sm"><ImageWithFallback src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150&v=2" alt="Profile" className="w-full h-full object-cover" /></div>
+              </div>
+              <div className="relative mb-8">
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center"><div className="w-4 h-4 rounded-full bg-gradient-to-tr from-emerald-400 to-emerald-200 shadow-md"></div></div>
+                <input type="text" placeholder="Ask me here..." className="w-full bg-white h-14 pl-12 pr-12 rounded-2xl shadow-sm border border-slate-100 text-slate-600 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-all" readOnly />
+                <button className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"><Mic size={20} /></button>
+              </div>
+              <div className="mb-8">
+                <div className="flex justify-between items-end mb-4"><h2 className="text-lg font-bold text-slate-900">Your Collections</h2><span className="text-xs text-emerald-600 font-medium">See All</span></div>
+                <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 no-scrollbar">
+                  <div className="relative w-36 h-48 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm group">
+                    {/* Updated Bali Image */}
+                    <ImageWithFallback src="https://images.unsplash.com/photo-1573790387438-4da905039392?auto=format&fit=crop&q=80&w=400&v=2" alt="Bali" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/60"></div>
+                    <div className="absolute bottom-3 left-3 text-white"><p className="font-bold text-sm">Bali Gems</p><p className="text-[10px] opacity-80">12 places</p></div>
+                  </div>
+                   <div className="relative w-36 h-48 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm">
+                    {/* Updated Kyoto Image */}
+                    <ImageWithFallback src="https://images.unsplash.com/photo-1492571350019-22de08371fd3?auto=format&fit=crop&q=80&w=400&v=2" alt="Kyoto" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/60"></div>
+                     <div className="absolute bottom-3 left-3 text-white"><p className="font-bold text-sm">Japan Trip</p><p className="text-[10px] opacity-80">8 places</p></div>
+                  </div>
+                   <div className="w-16 h-48 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center flex-shrink-0 text-slate-300"><Plus size={24} /></div>
+                </div>
+              </div>
+              <div>
+                 <div className="flex justify-between items-end mb-4"><h2 className="text-lg font-bold text-slate-900">Popular Itineraries</h2><span className="text-xs text-emerald-600 font-medium">Filter</span></div>
+                <ItineraryCard title="Explore Tokyo City in 5 Days" price="$1,200" places="15" image="https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&q=80&w=400&v=2" tags={['Architecture', 'Culture', 'Shopping']} />
+                <ItineraryCard title="Hidden Cafes of Paris" price="$850" places="8" image="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=400&v=2" tags={['Food', 'Relaxing', 'City Walk']} />
+              </div>
+              <BottomNav activeTab="home" />
+            </div>
+        );
+
+        // --- Screen 2: Create Trip ---
+        const Screen2 = () => (
+            <div className="flex flex-col h-full bg-slate-50 pt-12">
+               <div className="px-6 py-4 flex items-center justify-between sticky top-0 bg-slate-50 z-10">
+                 <button className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center text-slate-900"><ArrowLeft size={20} /></button>
+                 <h2 className="text-lg font-bold text-slate-900">Create a Trip</h2>
+                 <button className="w-10 h-10 flex items-center justify-center text-slate-400"><MoreHorizontal size={20} /></button>
+               </div>
+               <div className="px-6 space-y-8 mt-2 flex-1">
+                 <div className="space-y-3">
+                   <label className="text-sm font-bold text-slate-900 ml-1">Where to?</label>
+                   <div className="relative group">
+                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors"><MapPin size={20} /></div>
+                     <input type="text" defaultValue="France" className="w-full h-14 pl-12 pr-4 bg-white rounded-2xl border border-slate-200 text-slate-900 font-semibold shadow-sm focus:ring-2 focus:ring-emerald-100 outline-none transition-all" />
+                   </div>
+                 </div>
+                 <div className="space-y-3">
+                   <label className="text-sm font-bold text-slate-900 ml-1">How long?</label>
+                   <div className="relative group">
+                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors"><Calendar size={20} /></div>
+                     <input type="text" defaultValue="14 days" className="w-full h-14 pl-12 pr-4 bg-white rounded-2xl border border-slate-200 text-slate-900 font-semibold shadow-sm focus:ring-2 focus:ring-emerald-100 outline-none transition-all" />
+                   </div>
+                 </div>
+                 <div className="space-y-3">
+                    <label className="text-sm font-bold text-slate-900 ml-1">Travel Style</label>
+                    <div className="flex flex-wrap gap-3">
+                      <button className="px-4 py-2.5 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-semibold shadow-sm flex items-center gap-1.5">Relaxed</button>
+                      <button className="px-4 py-2.5 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-semibold shadow-sm flex items-center gap-1.5">Budget-friendly</button>
+                      <button className="px-4 py-2.5 bg-white text-slate-400 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50 border-dashed">+ Add Style</button>
+                    </div>
+                 </div>
+                 <div className="space-y-4 pt-2">
+                   <label className="text-sm font-bold text-slate-900 ml-1">Preferences</label>
+                   <label className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm cursor-pointer hover:border-emerald-200 transition-colors group">
+                     <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform"><CheckCircle2 size={16} className="text-white" strokeWidth={3} /></div>
+                     <div className="flex-1"><span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900">Use my saved places</span></div>
+                   </label>
+                   <label className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm cursor-pointer hover:border-emerald-200 transition-colors group">
+                      <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:scale-110 transition-transform"><CheckCircle2 size={16} className="text-white" strokeWidth={3} /></div>
+                     <div className="flex-1"><span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900">Recommend popular routes</span></div>
+                   </label>
+                 </div>
+               </div>
+               <div className="mt-auto p-6 pb-8 bg-slate-50">
+                 <button className="w-full h-14 bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-xl shadow-slate-300 flex items-center justify-center gap-3"><Sparkles size={20} className="text-emerald-400 fill-emerald-400" />Generate Itinerary</button>
+               </div>
+            </div>
+        );
+
+        // --- Screen 3: My Trips List ---
+        const TripCard = ({ destination, dates, status, collaborators = [], image }) => {
+          const getStatusStyle = (s) => {
+            switch(s.toLowerCase()) {
+              case 'published': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+              case 'collaborating': return 'bg-blue-100 text-blue-700 border-blue-200';
+              default: return 'bg-slate-100 text-slate-500 border-slate-200';
+            }
+          };
+          const getStatusIcon = (s) => {
+            switch(s.toLowerCase()) {
+              case 'published': return <Globe size={10} className="mr-1" />;
+              case 'collaborating': return <Users size={10} className="mr-1" />;
+              default: return <FileText size={10} className="mr-1" />;
+            }
+          };
+          return (
+            <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex gap-4 cursor-pointer hover:shadow-md transition-shadow">
+              <div className="w-24 h-24 rounded-xl bg-slate-200 overflow-hidden flex-shrink-0 relative"><ImageWithFallback src={image} alt={destination} className="w-full h-full object-cover" /></div>
+              <div className="flex-1 flex flex-col justify-center">
+                <div className="flex justify-between items-start mb-1">
+                   <h3 className="font-bold text-slate-900 text-lg leading-tight">{destination}</h3>
+                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center uppercase tracking-wide ${getStatusStyle(status)}`}>{getStatusIcon(status)}{status}</span>
+                </div>
+                <div className="flex items-center text-xs text-slate-500 mb-3 space-x-3"><span className="flex items-center"><Calendar size={12} className="mr-1.5" /> {dates}</span></div>
+                <div className="flex justify-between items-end">
+                   <div className="flex -space-x-2">
+                     {collaborators.map((src, i) => (<div key={i} className="w-6 h-6 rounded-full border-2 border-white overflow-hidden bg-slate-200"><ImageWithFallback src={src} alt="user" className="w-full h-full object-cover" /></div>))}
+                     {collaborators.length === 0 && (<div className="w-6 h-6 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center"><User size={12} className="text-slate-400" /></div>)}
+                   </div>
+                   <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400"><ChevronRight size={16} /></div>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        const Screen3 = () => (
+            <div className="flex flex-col h-full bg-slate-50 pt-12">
+               <div className="px-6 py-6 pb-2 sticky top-0 bg-slate-50 z-10">
+                 <div className="flex justify-between items-center mb-6">
+                   <h1 className="text-2xl font-extrabold text-slate-900">My Trips</h1>
+                   <button className="w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-600 shadow-sm"><Search size={20} /></button>
+                 </div>
+                 <div className="flex gap-4 border-b border-slate-200 pb-1">
+                   <button className="text-sm font-bold text-slate-900 border-b-2 border-emerald-500 pb-2 px-2">All Plans</button>
+                   <button className="text-sm font-medium text-slate-400 pb-2 px-2">Drafts</button>
+                 </div>
+               </div>
+               <div className="px-6 pt-4 space-y-4 pb-24 overflow-y-auto">
+                 {/* Updated Collaborator Avatars with Unsplash URLs */}
+                 <TripCard destination="France Adventure" dates="14 days • Flexible" status="Draft" image="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=400&v=2" collaborators={['https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150&v=2']} />
+                 <TripCard destination="Kyoto & Osaka" dates="Aug 18 - 22" status="Collaborating" image="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&q=80&w=400&v=2" collaborators={['https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150&v=2','https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150&v=2']} />
+                 <TripCard destination="Bali Retreat" dates="Sep 10 - 17" status="Published" image="https://images.unsplash.com/photo-1555400038-63f5ba517a47?auto=format&fit=crop&q=80&w=400&v=2" collaborators={['https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150&v=2','https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=150&v=2']} />
+               </div>
+               <BottomNav activeTab="trips" />
+            </div>
+        );
+
+        // --- Screen 4: Trip Detail Page (Author View - Editable) ---
+        const Screen4 = () => {
+          return (
+            <div className="flex flex-col h-full bg-slate-50">
+              <div className="relative h-64 bg-slate-900 flex-shrink-0">
+                <ImageWithFallback src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=800&v=2" className="w-full h-full object-cover opacity-80" alt="France" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 to-transparent"></div>
+                <div className="absolute top-10 w-full px-6 py-4 flex justify-between items-center text-white z-10">
+                  <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center"><ArrowLeft size={20} /></button>
+                  <div className="flex gap-3">
+                     <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center"><Share2 size={20} /></button>
+                     <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center"><MoreHorizontal size={20} /></button>
+                  </div>
+                </div>
+                <div className="absolute bottom-6 left-6 right-6">
+                  <div className="flex justify-between items-end mb-2">
+                    <h1 className="text-3xl font-extrabold text-white">France Adventure</h1>
+                    <div className="flex -space-x-2">
+                      {/* Updated Header Avatars - Ladies from Unsplash */}
+                      <ImageWithFallback src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=150&v=2" className="w-8 h-8 rounded-full border-2 border-slate-900" alt="User 1" />
+                      <ImageWithFallback src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150&v=2" className="w-8 h-8 rounded-full border-2 border-slate-900" alt="User 2" />
+                       <div className="w-8 h-8 rounded-full border-2 border-slate-900 bg-slate-700 text-white text-[10px] flex items-center justify-center font-bold">+1</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-slate-300 text-sm">
+                    <span className="flex items-center"><Calendar size={14} className="mr-1.5" /> 14 Days</span>
+                     <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
+                    <span className="flex items-center">Relaxed</span>
+                     <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
+                     <span className="flex items-center">Budget</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50 -mt-6 rounded-t-[32px] relative z-10 pt-8 px-6 pb-24 space-y-8">
+                <div className="flex gap-4">
+                  <button className="flex-1 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center gap-2 hover:border-emerald-200 transition-colors">
+                     <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><Plane size={20} /></div>
+                     <span className="text-xs font-bold text-slate-700">Find Flights</span>
+                  </button>
+                   <button className="flex-1 bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center gap-2 hover:border-emerald-200 transition-colors">
+                     <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><Hotel size={20} /></div>
+                     <span className="text-xs font-bold text-slate-700">Hotels</span>
+                  </button>
+                </div>
+
+                {/* UPGRADED: Realistic Map Preview Block with TEXT Markers */}
+                <div className="relative w-full h-56 rounded-3xl overflow-hidden shadow-sm border border-slate-100 group">
+                    <RealisticMap />
+                    <div className="absolute top-3 left-4">
+                       <span className="text-xs font-bold text-slate-600 bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl border border-white/50 shadow-sm flex items-center gap-1">
+                         <Map size={12} className="text-emerald-500"/> Map View
+                       </span>
+                    </div>
+                    <div className="absolute bottom-3 right-3">
+                        <button className="bg-slate-900 text-white p-2 rounded-full shadow-lg flex items-center gap-2 px-3 text-xs font-bold transform transition-transform hover:scale-105 active:scale-95">
+                          <Maximize2 size={12} /> Zoom Out
+                        </button>
+                     </div>
+                </div>
+
+                <div>
+                   <h3 className="text-lg font-bold text-slate-900 mb-4 flex justify-between items-center">Itinerary <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">Editing</span></h3>
+                   <div className="relative pl-6 border-l-2 border-slate-200 space-y-8">
+                      {/* Day 1 */}
+                      <div className="relative">
+                        <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-white"></div>
+                        <div className="mb-2"><h4 className="font-bold text-slate-900">Day 1: Arrival in Paris</h4><span className="text-xs text-slate-500">Oct 12 • Mon</span></div>
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3">
+                           <div className="flex gap-3 mb-2">
+                             <div className="w-16 h-16 rounded-lg bg-slate-200 flex-shrink-0 overflow-hidden"><ImageWithFallback src="https://images.unsplash.com/photo-1543349689-9a4d426bee8e?auto=format&fit=crop&q=80&w=200&v=2" className="w-full h-full object-cover" /></div>
+                             <div className="flex-1">
+                                <div className="flex justify-between items-start"><h5 className="font-bold text-sm text-slate-900">Eiffel Tower & Picnic</h5><span className="text-xs font-semibold text-slate-500">€25</span></div>
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">Start the trip with a relaxed evening picnic at Champ de Mars.</p>
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-2 pt-2 border-t border-slate-50 mt-2">
+                              {/* Updated Comment Avatar */}
+                              <div className="flex -space-x-1"><ImageWithFallback src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100&v=2" className="w-5 h-5 rounded-full border border-white" /></div>
+                              <span className="text-[10px] text-slate-400 italic">"Let's buy cheese beforehand!"</span>
+                           </div>
+                        </div>
+                      </div>
+                      {/* Day 2 */}
+                      <div className="relative">
+                        <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-slate-300 ring-4 ring-white"></div>
+                        <div className="mb-2"><h4 className="font-bold text-slate-900">Day 2: Art & History</h4><span className="text-xs text-slate-500">Oct 13 • Tue</span></div>
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                           <div className="flex justify-between items-start mb-1"><h5 className="font-bold text-sm text-slate-900">Louvre Museum</h5><span className="text-xs font-semibold text-slate-500">€17</span></div>
+                            <div className="flex items-center gap-2 mt-2"><span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[10px] rounded-md font-medium">Tickets needed</span></div>
+                        </div>
+                      </div>
+                   </div>
+                   <button className="w-full py-3 mt-6 text-sm font-semibold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl hover:bg-slate-100 transition-colors">+ Add Day 3</button>
+                </div>
+              </div>
+              
+              <div className="absolute bottom-0 w-full bg-white border-t border-slate-100 p-4 px-6 pb-8 z-20">
+                <button className="w-full h-14 bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-2 transform active:scale-95 transition-transform">Start Booking</button>
+              </div>
+            </div>
+          );
+        };
+
+        // --- Screen 5: Template View (Visitor View - Read Only) ---
+        const Screen5 = () => {
+          return (
+            <div className="flex flex-col h-full bg-slate-50">
+              <div className="relative h-64 bg-slate-900 flex-shrink-0">
+                <ImageWithFallback src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&q=80&w=800&v=2" className="w-full h-full object-cover opacity-80" alt="France" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 to-transparent"></div>
+                <div className="absolute top-10 w-full px-6 py-4 flex justify-between items-center text-white z-10">
+                  <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center"><ArrowLeft size={20} /></button>
+                  <div className="flex gap-3">
+                     <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center"><Share2 size={20} /></button>
+                     <button className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center"><MoreHorizontal size={20} /></button>
+                  </div>
+                </div>
+                <div className="absolute bottom-6 left-6 right-6">
+                  <div className="flex justify-between items-end mb-2">
+                    <h1 className="text-3xl font-extrabold text-white">France Adventure</h1>
+                    <div className="flex items-center gap-2">
+                        {/* Updated Author Avatar - Lady from Unsplash */}
+                        <div className="w-6 h-6 rounded-full border border-white overflow-hidden"><ImageWithFallback src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=150&v=2" className="w-full h-full object-cover" alt="Author" /></div>
+                        <span className="text-xs text-white/90 font-medium">by Alex M.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-slate-300 text-sm">
+                    <span className="flex items-center"><Calendar size={14} className="mr-1.5" /> 14 Days</span>
+                     <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
+                    <span className="flex items-center">Relaxed</span>
+                     <span className="w-1 h-1 bg-slate-500 rounded-full"></span>
+                     <span className="flex items-center">Budget</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto no-scrollbar bg-slate-50 -mt-6 rounded-t-[32px] relative z-10 pt-8 px-6 pb-24 space-y-8">
+                <div className="flex gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                   <div className="flex-1 flex flex-col items-center border-r border-slate-100">
+                     <span className="text-[10px] text-slate-400 font-bold uppercase">Saves</span>
+                     <span className="text-lg font-bold text-slate-900 flex items-center gap-1"><Bookmark size={14} className="text-emerald-500 fill-emerald-500"/> 842</span>
+                   </div>
+                    <div className="flex-1 flex flex-col items-center border-r border-slate-100">
+                     <span className="text-[10px] text-slate-400 font-bold uppercase">Budget</span>
+                     <span className="text-lg font-bold text-slate-900">€1,500</span>
+                   </div>
+                    <div className="flex-1 flex flex-col items-center">
+                     <span className="text-[10px] text-slate-400 font-bold uppercase">Rating</span>
+                     <span className="text-lg font-bold text-slate-900 flex items-center gap-1"><Star size={14} className="text-yellow-400 fill-yellow-400"/> 4.8</span>
+                   </div>
+                </div>
+
+                {/* UPGRADED: Realistic Map Preview Block with TEXT Markers */}
+                <div className="relative w-full h-56 rounded-3xl overflow-hidden shadow-sm border border-slate-100 group">
+                    <RealisticMap />
+                    <div className="absolute top-3 left-4">
+                       <span className="text-xs font-bold text-slate-600 bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl border border-white/50 shadow-sm flex items-center gap-1">
+                         <Map size={12} className="text-emerald-500"/> Map View
+                       </span>
+                    </div>
+                    <div className="absolute bottom-3 right-3">
+                        <button className="bg-slate-900 text-white p-2 rounded-full shadow-lg flex items-center gap-2 px-3 text-xs font-bold transform transition-transform hover:scale-105 active:scale-95">
+                          <Maximize2 size={12} /> Zoom Out
+                        </button>
+                     </div>
+                </div>
+
+                <div>
+                   <h3 className="text-lg font-bold text-slate-900 mb-4 flex justify-between items-center">Itinerary</h3>
+                   <div className="relative pl-6 border-l-2 border-slate-200 space-y-8">
+                      {/* Day 1 */}
+                      <div className="relative">
+                        <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-white"></div>
+                        <div className="mb-2"><h4 className="font-bold text-slate-900">Day 1: Arrival in Paris</h4><span className="text-xs text-slate-500">Oct 12 • Mon</span></div>
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3">
+                           <div className="flex gap-3 mb-2">
+                             <div className="w-16 h-16 rounded-lg bg-slate-200 flex-shrink-0 overflow-hidden"><ImageWithFallback src="https://images.unsplash.com/photo-1543349689-9a4d426bee8e?auto=format&fit=crop&q=80&w=200&v=2" className="w-full h-full object-cover" /></div>
+                             <div className="flex-1">
+                                <div className="flex justify-between items-start"><h5 className="font-bold text-sm text-slate-900">Eiffel Tower & Picnic</h5><span className="text-xs font-semibold text-slate-500">€25</span></div>
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">Start the trip with a relaxed evening picnic at Champ de Mars.</p>
+                             </div>
+                           </div>
+                        </div>
+                      </div>
+                      {/* Day 2 */}
+                      <div className="relative">
+                        <div className="absolute -left-[31px] top-0 w-4 h-4 rounded-full bg-slate-300 ring-4 ring-white"></div>
+                        <div className="mb-2"><h4 className="font-bold text-slate-900">Day 2: Art & History</h4><span className="text-xs text-slate-500">Oct 13 • Tue</span></div>
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                           <div className="flex justify-between items-start mb-1"><h5 className="font-bold text-sm text-slate-900">Louvre Museum</h5><span className="text-xs font-semibold text-slate-500">€17</span></div>
+                        </div>
+                      </div>
+                   </div>
+                </div>
+              </div>
+              <div className="absolute bottom-0 w-full bg-white border-t border-slate-100 p-4 px-6 pb-8 z-20">
+                 <button className="w-full h-14 bg-emerald-600 text-white rounded-2xl font-bold text-lg shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 transform active:scale-95 transition-all hover:bg-emerald-700"><Copy size={20} />Copy & Customize Trip</button>
+              </div>
+            </div>
+          );
+        };
+
+        // --- Screen 6: Full Map View Detail (High Fidelity) ---
+        const Screen6 = () => {
+          return (
+            <div className="flex flex-col h-full bg-white relative">
+               {/* Map Layer */}
+               <RealisticMap isFull={true} />
+
+               {/* Top UI */}
+               <div className="absolute top-12 left-6 z-10">
+                  <button className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md border border-white/50 flex items-center justify-center text-slate-700 shadow-md"><ArrowLeft size={20} /></button>
+               </div>
+               <div className="absolute top-12 right-6 z-10 flex flex-col gap-3">
+                   <button className="w-10 h-10 rounded-full bg-white/90 text-slate-700 flex items-center justify-center shadow-md border border-white/50"><Layers size={18} /></button>
+                   <button className="w-10 h-10 rounded-full bg-white/90 text-slate-700 flex items-center justify-center shadow-md border border-white/50"><Navigation size={18} /></button>
+               </div>
+
+               {/* Bottom Detail Sheet */}
+               <div className="absolute bottom-8 left-6 right-6 bg-white/90 backdrop-blur-xl rounded-3xl p-5 shadow-2xl border border-white/50">
+                  <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-4"></div>
+                  <div className="flex justify-between items-start mb-4">
+                     <div>
+                        <h2 className="text-xl font-bold text-slate-900">Route Overview</h2>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">14 Days</span>
+                            <span className="text-xs text-slate-500">• 450 km Total</span>
+                        </div>
+                     </div>
+                  </div>
+                  
+                  {/* Detailed Stop List */}
+                  <div className="space-y-0">
+                     {/* Stop 1 */}
+                     <div className="flex items-start gap-3 pb-3 relative">
+                        <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-slate-200 border-l border-dashed border-slate-300"></div>
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700 shrink-0 z-10 border-2 border-white shadow-sm">1</div>
+                        <div className="flex-1 pt-1">
+                           <div className="flex justify-between"><div className="font-bold text-sm text-slate-900">Paris</div><span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded">4 Nights</span></div>
+                           <div className="text-xs text-slate-500 mt-0.5">Hotel Le Meurice • 3 Activities</div>
+                        </div>
+                     </div>
+                     {/* Stop 2 */}
+                     <div className="flex items-start gap-3 pt-1 pb-3 relative">
+                        <div className="absolute left-[15px] top-8 bottom-0 w-0.5 bg-slate-200 border-l border-dashed border-slate-300"></div>
+                        <div className="w-8 h-8 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0 z-10 shadow-sm">2</div>
+                        <div className="flex-1 pt-1">
+                           <div className="flex justify-between"><div className="font-bold text-sm text-slate-900">Versailles</div><span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded">Day Trip</span></div>
+                           <div className="text-xs text-slate-500 mt-0.5">22km drive • Palace Tour</div>
+                        </div>
+                     </div>
+                     {/* Stop 3 - Visual Hint */}
+                     <div className="flex items-start gap-3 pt-1 opacity-50">
+                        <div className="w-8 h-8 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0 z-10 shadow-sm">3</div>
+                        <div className="flex-1 pt-1"><div className="font-bold text-sm text-slate-900">Giverny</div></div>
+                     </div>
+                  </div>
+
+                  <button className="w-full mt-6 bg-slate-900 text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-slate-200">View Itinerary Details</button>
+               </div>
+            </div>
+          );
+        };
+
+        const App = () => {
+          return (
+            <div className="min-h-screen bg-slate-200 p-8 flex flex-col items-start overflow-x-auto">
+              <div className="flex gap-12 items-start">
+                <MobileFrame title="Screen 1: Home"><Screen1 /></MobileFrame>
+                <MobileFrame title="Screen 2: Create Trip"><Screen2 /></MobileFrame>
+                <MobileFrame title="Screen 3: My Trips List"><Screen3 /></MobileFrame>
+                <MobileFrame title="Screen 4: Detail (Owner)" onDarkBackground={true}><Screen4 /></MobileFrame>
+                <MobileFrame title="Screen 5: Template (Visitor)" onDarkBackground={true}><Screen5 /></MobileFrame>
+                <MobileFrame title="Screen 6: Map Detail" onDarkBackground={false}><Screen6 /></MobileFrame>
+              </div>
+            </div>
+          );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
